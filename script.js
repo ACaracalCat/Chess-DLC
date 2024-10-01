@@ -5,21 +5,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const moveHistory = document.getElementById('move-history'); // Get move history container
     let moveCount = 1; // Initialize the move count
     let userColor = 'w'; // Initialize the user's color as white
+    const stockfish = new Worker('https://cdn.rawgit.com/nmrugg/stockfish.js/master/stockfish.js'); // Initialize Stockfish
 
-    // Function to make a random move for the computer
-    const makeRandomMove = () => {
-        const possibleMoves = game.moves();
-
+    // Function to make a move for the computer using Stockfish
+    const makeStockfishMove = () => {
         if (game.game_over()) {
             alert("Checkmate!");
-        } else {
-            const randomIdx = Math.floor(Math.random() * possibleMoves.length);
-            const move = possibleMoves[randomIdx];
-            game.move(move);
-            board.position(game.fen());
-            recordMove(move, moveCount); // Record and display the move with move count
-            moveCount++; // Increament the move count
+            return;
         }
+
+        stockfish.postMessage(`position fen ${game.fen()}`); // Send the current position to Stockfish
+        stockfish.postMessage('go depth 10'); // You can adjust the depth as needed
+
+        // Receive the move from Stockfish
+        stockfish.onmessage = (event) => {
+            const move = event.data;
+
+            // If a move is returned
+            if (move.includes("bestmove")) {
+                const bestMove = move.split(" ")[1]; // Extract the best move
+                game.move(bestMove); // Make the move in the game
+                board.position(game.fen()); // Update the board position
+                recordMove(bestMove, moveCount); // Record and display the move with move count
+                moveCount++; // Increment the move count
+            }
+        };
     };
 
     // Function to record and display a move in the move history
@@ -31,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to handle the start of a drag position
     const onDragStart = (source, piece) => {
-        // Allow the user to drag only their own pieces based on color
         return !game.game_over() && piece.search(userColor) === 0;
     };
 
@@ -45,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (move === null) return 'snapback';
 
-        window.setTimeout(makeRandomMove, 250);
+        window.setTimeout(makeStockfishMove, 250); // Call Stockfish to make a move
         recordMove(move.san, moveCount); // Record and display the move with move count
         moveCount++;
     };
@@ -98,9 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event listener for the "Flip Board" button
     document.querySelector('.flip-board').addEventListener('click', () => {
         board.flip();
-        makeRandomMove();
-        // Toggle user's color after flipping the board
-        userColor = userColor === 'w' ? 'b' : 'w';
+        userColor = userColor === 'w' ? 'b' : 'w'; // Toggle user's color after flipping the board
     });
-
 });
